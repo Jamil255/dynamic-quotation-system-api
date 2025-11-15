@@ -1,0 +1,121 @@
+datasource db {
+    provider = "mongodb"
+    url      = env("DATABASE_URL")
+}
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+model Company {
+    id        String    @id @default(auto()) @map("_id") @db.ObjectId
+    name      String    @unique
+    address   String
+    users     User[]
+    invoices  Invoice[]
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+}
+
+model User {
+    id            String         @id @default(auto()) @map("_id") @db.ObjectId
+    email         String         @unique
+    userName      String
+    password      String
+    role          UserRole       @default(ADMIN)
+    createdAt     DateTime       @default(now())
+    updatedAt     DateTime       @updatedAt
+    invoices      Invoice[]
+    accessTokens  AccessToken[]
+    refreshTokens RefreshToken[]
+    notifications Notification[]
+    company       Company?       @relation(fields: [companyId], references: [id])
+    companyId     String?        @db.ObjectId
+}
+
+model AccessToken {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    token     String
+    expiresAt DateTime
+    isRevoked Boolean  @default(false)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId    String   @db.ObjectId
+
+    @@index([userId])
+    @@index([token])
+}
+
+model RefreshToken {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    token     String   @unique
+    expiresAt DateTime
+    isRevoked Boolean  @default(false)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId    String   @db.ObjectId
+
+    @@index([userId])
+}
+
+model Invoice {
+    id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+    customerName         String
+    companyName          String
+    devliveryAddress     String
+    address              Json
+    email                String
+    phoneNo              String
+    specialInstructions  String
+    orderRosurces        String
+    OrderDate            DateTime
+    issueDate            DateTime
+    dueDate              DateTime
+    paymentMethod        String
+    advance              String
+    termsAndConditions   String
+    productName          String
+    category             String
+    unitMeasure          String
+    quantity             String
+    unitPrice            String
+    Discount             Int
+    tax                  Int
+    subTotal             Int
+    totalDiscountApplied Int
+    totalTaxApplied      Int
+    grandTotal           Int
+
+    userId String @db.ObjectId
+    user   User   @relation(fields: [userId], references: [id])
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    company   Company? @relation(fields: [companyId], references: [id])
+    companyId String?  @db.ObjectId
+}
+
+model Notification {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    title     String
+    content   String
+    date      DateTime
+    time      DateTime
+    isSeen    Boolean  @default(false)
+    type      String?
+    route     String?
+    userId    String   @db.ObjectId
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([userId])
+    @@index([isSeen])
+}
+
+enum UserRole {
+    ADMIN
+    USER
+}
