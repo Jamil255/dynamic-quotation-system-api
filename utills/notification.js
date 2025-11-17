@@ -55,7 +55,6 @@ export async function createNotification({
       console.log(` Notification created for user ${userId}`)
     } catch (firebaseError) {
       console.warn(' Firebase notification failed:', firebaseError.message)
-      // MongoDB notification is still saved even if Firebase fails
     }
 
     return notification

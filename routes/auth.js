@@ -1,12 +1,12 @@
 import express from 'express'
 import {
+  createUserController,
   loginController,
-  signupController,
   logoutController,
   refreshTokenController,
-  createUserController,
+  signupController,
 } from '../controllers/auth.js'
-import { authenticate, authorize } from '../middlewares/auth.js'
+import { authenticate, role } from '../middlewares/auth.js'
 
 const app = express.Router()
 
@@ -17,6 +17,6 @@ app.post('/logout', logoutController)
 app.post('/refresh-token', refreshTokenController)
 
 // Protected routes - Admin only
-app.post('/create-user', authenticate, authorize('ADMIN'), createUserController)
+app.post('/create-user', authenticate, role('ADMIN'), createUserController)
 
 export default app
