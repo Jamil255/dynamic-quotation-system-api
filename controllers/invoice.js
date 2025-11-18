@@ -34,58 +34,117 @@ export const createInvoiceController = async (req, res) => {
     } = req.body
 
     // Validate required fields
-    if (
-      !customerName ||
-      !companyName ||
-      !devliveryAddress ||
-      !address ||
-      !email ||
-      !phoneNo ||
-      !OrderDate ||
-      !issueDate ||
-      !dueDate ||
-      !paymentMethod ||
-      !productName ||
-      !category ||
-      !unitMeasure ||
-      !quantity ||
-      !unitPrice
-    ) {
-      throw new ApiError(400, 'All required fields must be provided')
+    if (!customerName || customerName.trim() === '') {
+      throw new ApiError(400, 'Customer name is required')
+    }
+    if (!companyName || companyName.trim() === '') {
+      throw new ApiError(400, 'Company name is required')
+    }
+    if (!devliveryAddress || devliveryAddress.trim() === '') {
+      throw new ApiError(400, 'Delivery address is required')
+    }
+    if (!address) {
+      throw new ApiError(400, 'Address is required')
+    }
+    if (!email || email.trim() === '') {
+      throw new ApiError(400, 'Email is required')
+    }
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      throw new ApiError(400, 'Invalid email format')
+    }
+    if (!phoneNo || phoneNo.trim() === '') {
+      throw new ApiError(400, 'Phone number is required')
+    }
+    if (!OrderDate) {
+      throw new ApiError(400, 'Order date is required')
+    }
+    if (!issueDate) {
+      throw new ApiError(400, 'Issue date is required')
+    }
+    if (!dueDate) {
+      throw new ApiError(400, 'Due date is required')
+    }
+    if (!paymentMethod || paymentMethod.trim() === '') {
+      throw new ApiError(400, 'Payment method is required')
+    }
+    if (!productName || productName.trim() === '') {
+      throw new ApiError(400, 'Product name is required')
+    }
+    if (!category || category.trim() === '') {
+      throw new ApiError(400, 'Product category is required')
+    }
+    if (!unitMeasure || unitMeasure.trim() === '') {
+      throw new ApiError(400, 'Unit measure is required')
+    }
+    if (!quantity || quantity.trim() === '') {
+      throw new ApiError(400, 'Quantity is required')
+    }
+    if (!unitPrice || unitPrice.trim() === '') {
+      throw new ApiError(400, 'Unit price is required')
+    }
+
+    // Validate numeric values
+    const parsedQuantity = parseFloat(quantity)
+    const parsedUnitPrice = parseFloat(unitPrice)
+    const parsedDiscount = parseFloat(Discount) || 0
+    const parsedTax = parseFloat(tax) || 0
+
+    if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      throw new ApiError(400, 'Quantity must be a positive number')
+    }
+    if (isNaN(parsedUnitPrice) || parsedUnitPrice <= 0) {
+      throw new ApiError(400, 'Unit price must be a positive number')
+    }
+    if (isNaN(parsedDiscount) || parsedDiscount < 0 || parsedDiscount > 100) {
+      throw new ApiError(400, 'Discount must be between 0 and 100')
+    }
+    if (isNaN(parsedTax) || parsedTax < 0 || parsedTax > 100) {
+      throw new ApiError(400, 'Tax must be between 0 and 100')
     }
 
     // Get user ID from authenticated user
     const userId = req.user.id
     const companyId = req.user.companyId
 
+    if (!companyId) {
+      throw new ApiError(
+        400,
+        'User must be associated with a company to create invoices'
+      )
+    }
+
     // Create invoice
     const invoice = await prisma.invoice.create({
       data: {
-        customerName,
-        companyName,
-        devliveryAddress,
+        customerName: customerName.trim(),
+        companyName: companyName.trim(),
+        devliveryAddress: devliveryAddress.trim(),
         address,
-        email,
-        phoneNo,
-        specialInstructions: specialInstructions || '',
-        orderRosurces: orderRosurces || '',
+        email: email.trim().toLowerCase(),
+        phoneNo: phoneNo.trim(),
+        specialInstructions: specialInstructions
+          ? specialInstructions.trim()
+          : '',
+        orderRosurces: orderRosurces ? orderRosurces.trim() : '',
         OrderDate: new Date(OrderDate),
         issueDate: new Date(issueDate),
         dueDate: new Date(dueDate),
-        paymentMethod,
+        paymentMethod: paymentMethod.trim(),
         advance: advance || '0',
-        termsAndConditions: termsAndConditions || '',
-        productName,
-        category,
-        unitMeasure,
-        quantity,
-        unitPrice,
-        Discount: Discount || 0,
-        tax: tax || 0,
-        subTotal: subTotal || 0,
-        totalDiscountApplied: totalDiscountApplied || 0,
-        totalTaxApplied: totalTaxApplied || 0,
-        grandTotal: grandTotal || 0,
+        termsAndConditions: termsAndConditions ? termsAndConditions.trim() : '',
+        productName: productName.trim(),
+        category: category.trim(),
+        unitMeasure: unitMeasure.trim(),
+        quantity: quantity.trim(),
+        unitPrice: unitPrice.trim(),
+        Discount: parsedDiscount,
+        tax: parsedTax,
+        subTotal: parseInt(subTotal) || 0,
+        totalDiscountApplied: parseInt(totalDiscountApplied) || 0,
+        totalTaxApplied: parseInt(totalTaxApplied) || 0,
+        grandTotal: parseInt(grandTotal) || 0,
         userId,
         companyId,
       },
@@ -123,6 +182,7 @@ export const createInvoiceController = async (req, res) => {
     if (error instanceof ApiError) {
       throw error
     }
+    console.error('Invoice creation error:', error)
     throw new ApiError(500, error?.message || 'Failed to create invoice')
   }
 }
@@ -201,23 +261,9 @@ export const getAllInvoicesController = async (req, res) => {
 
     const totalPages = Math.ceil(totalCount / take)
 
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        {
-          invoices,
-          pagination: {
-            currentPage: parseInt(page),
-            totalPages,
-            totalCount,
-            limit: take,
-            hasNextPage: parseInt(page) < totalPages,
-            hasPrevPage: parseInt(page) > 1,
-          },
-        },
-        'Invoices retrieved successfully'
-      )
-    )
+    return res
+      .status(200)
+      .json(new ApiResponse(200, invoices, 'Invoices retrieved successfully'))
   } catch (error) {
     if (error instanceof ApiError) {
       throw error

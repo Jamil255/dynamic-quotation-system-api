@@ -6,13 +6,21 @@ import { testDatabaseConnection } from './config/prisma.js'
 import { errorHandler, notFound } from './middlewares/error-handler.js'
 import authRoutes from './routes/auth.js'
 import invoiceRoutes from './routes/invoice.js'
+import cors from 'cors'
+
 const app = express()
-const port = process.env.PORT || 3000
+const port = process.env.PORT || 5000
 
 app.use(express.json())
 app.use(helmet())
 app.use(morgan('dev'))
 app.use(cookieParser())
+app.use(
+  cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    credentials: true,
+  })
+)
 
 // app.get('/', (req, res) => res.send('API is running...'))
 

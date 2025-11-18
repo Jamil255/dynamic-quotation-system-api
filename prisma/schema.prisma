@@ -26,6 +26,7 @@ model User {
     createdAt     DateTime       @default(now())
     updatedAt     DateTime       @updatedAt
     invoices      Invoice[]
+    address       String?
     accessTokens  AccessToken[]
     refreshTokens RefreshToken[]
     notifications Notification[]

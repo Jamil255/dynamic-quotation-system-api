@@ -8,7 +8,6 @@ export const signupController = async (req, res) => {
   try {
     const { email, userName, password, companyName, companyAddress } = req.body
 
-    // Validate required fields
     if (!email || !userName || !password || !companyName || !companyAddress) {
       throw new ApiError(
         400,
@@ -83,7 +82,6 @@ export const signupController = async (req, res) => {
     const refreshTokenExpiresAt = new Date()
     refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + 7)
 
-  
     Promise.all([
       prisma.accessToken.create({
         data: {
@@ -134,7 +132,7 @@ export const signupController = async (req, res) => {
 // Admin creates USER role for their company
 export const createUserController = async (req, res) => {
   try {
-    const { email, userName, password, role } = req.body
+    const { email, userName, password, address, role } = req.body
 
     // Validate required fields
     if (!email || !userName || !password) {
@@ -167,6 +165,7 @@ export const createUserController = async (req, res) => {
         email,
         userName,
         password: hashedPassword,
+        address: address || '',
         role: role || 'USER',
         companyId,
       },
@@ -174,6 +173,7 @@ export const createUserController = async (req, res) => {
         id: true,
         email: true,
         userName: true,
+        address: true,
         role: true,
         companyId: true,
         createdAt: true,
@@ -200,9 +200,260 @@ export const createUserController = async (req, res) => {
   }
 }
 
+// Get all users for admin's company
+export const getAllUsersController = async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+
+    if (!companyId) {
+      throw new ApiError(400, 'User must be associated with a company')
+    }
+
+    const { search, role: roleFilter, page = 1, limit = 50 } = req.query
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const take = parseInt(limit)
+
+    // Build filter
+    const where = { companyId }
+
+    if (search) {
+      where.OR = [
+        { userName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    if (roleFilter) {
+      where.role = roleFilter
+    }
+
+    const [users, totalCount] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          id: true,
+          email: true,
+          userName: true,
+          address: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.user.count({ where }),
+    ])
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          users,
+          totalCount,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / take),
+        },
+        'Users retrieved successfully'
+      )
+    )
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(500, error?.message || 'Failed to retrieve users')
+  }
+}
+
+// Get user by ID (admin only)
+export const getUserByIdController = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterId = req.user.id
+    const requesterCompanyId = req.user.companyId
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+        address: true,
+        role: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
+        },
+      },
+    })
+
+    if (!user) {
+      throw new ApiError(404, 'User not found')
+    }
+
+    // Ensure admin can only view users from their company
+    if (user.companyId !== requesterCompanyId) {
+      throw new ApiError(403, 'Access denied')
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, user, 'User fetched successfully'))
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(500, error?.message || 'Failed to fetch user')
+  }
+}
+
+// Update user by ID (admin only)
+export const updateUserController = async (req, res) => {
+  try {
+    const { id } = req.params
+    const requesterCompanyId = req.user.companyId
+    const { userName, address } = req.body
+
+    // Validate input
+    if (!userName || userName.trim() === '') {
+      throw new ApiError(400, 'Username is required')
+    }
+
+    // Find user first to verify company
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      select: { companyId: true },
+    })
+
+    if (!existingUser) {
+      throw new ApiError(404, 'User not found')
+    }
+
+    // Ensure admin can only update users from their company
+    if (existingUser.companyId !== requesterCompanyId) {
+      throw new ApiError(403, 'Access denied')
+    }
+
+    // Update user
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        userName: userName.trim(),
+        address: address ? address.trim() : null,
+      },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+        address: true,
+        role: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
+        },
+      },
+    })
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, updatedUser, 'User updated successfully'))
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(500, error?.message || 'Failed to update user')
+  }
+}
+
+// Update user profile
+export const updateProfileController = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { userName, address, email } = req.body
+
+    // Validate input
+    if (!userName || userName.trim() === '') {
+      throw new ApiError(400, 'Username is required')
+    }
+
+    // If email is being updated, check if it's unique
+    if (email && email.trim() !== '') {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: email.trim(),
+          NOT: { id: userId },
+        },
+      })
+
+      if (existingUser) {
+        throw new ApiError(409, 'Email already in use by another user')
+      }
+    }
+
+    // Update user
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        userName: userName.trim(),
+        address: address ? address.trim() : null,
+        ...(email && email.trim() !== '' && { email: email.trim() }),
+      },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+        address: true,
+        role: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+          },
+        },
+      },
+    })
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, updatedUser, 'Profile updated successfully'))
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(500, error?.message || 'Failed to update profile')
+  }
+}
+
 export const loginController = async (req, res) => {
   try {
     const { email, password } = req.body
+
+    console.log('Login attempt for email:', email)
 
     // Validate required fields
     if (!email || !password) {
@@ -223,12 +474,15 @@ export const loginController = async (req, res) => {
       },
     })
 
+    console.log('User found:', user ? 'Yes' : 'No')
+
     if (!user) {
       throw new ApiError(401, 'Invalid email or password')
     }
 
     // Verify password
     const isPasswordValid = await comparePassword(password, user?.password)
+    console.log('Password valid:', isPasswordValid)
 
     if (!isPasswordValid) {
       throw new ApiError(401, 'Invalid email or password')
@@ -241,14 +495,12 @@ export const loginController = async (req, res) => {
     const accessToken = generateAccessToken(user.id, user.role, [])
     const refreshToken = generateRefreshToken(user.id)
 
-
     const accessTokenExpiresAt = new Date()
-    accessTokenExpiresAt.setMinutes(accessTokenExpiresAt.getMinutes() + 15) 
+    accessTokenExpiresAt.setMinutes(accessTokenExpiresAt.getMinutes() + 15)
 
     const refreshTokenExpiresAt = new Date()
     refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + 7)
 
-   
     Promise.all([
       prisma.accessToken.create({
         data: {
@@ -289,14 +541,15 @@ export const loginController = async (req, res) => {
       )
     )
   } catch (error) {
-    // console.log(error)
-    throw new ApiError(500, error.message)
+    if (error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError(500, error?.message || 'Login failed')
   }
 }
 
 export const logoutController = async (req, res) => {
   try {
-
     const refreshToken = req.cookies?.authtoken
       ? JSON.parse(req.cookies.authtoken).refreshToken
       : req.body.refreshToken
