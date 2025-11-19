@@ -22,6 +22,8 @@ export async function createNotification({
 }) {
   const now = new Date()
 
+  console.log('Creating notification with userId:', userId, 'title:', title)
+
   try {
     // 1. Save to MongoDB
     const notification = await prisma.notification.create({

@@ -63,9 +63,21 @@ export const createInvoiceController = async (req, res) => {
     if (!issueDate) {
       throw new ApiError(400, 'Issue date is required')
     }
-    if (!dueDate) {
-      throw new ApiError(400, 'Due date is required')
+    // Validate and parse dates
+    const parseDate = (dateString, fieldName) => {
+      if (!dateString) {
+        throw new ApiError(400, `${fieldName} is required`)
+      }
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        throw new ApiError(400, `Invalid ${fieldName} format`)
+      }
+      return date
     }
+
+    const orderDate = parseDate(OrderDate, 'Order Date')
+    const parsedIssueDate = parseDate(issueDate, 'Issue Date')
+    const parsedDueDate = parseDate(dueDate, 'Due Date')
     if (!paymentMethod || paymentMethod.trim() === '') {
       throw new ApiError(400, 'Payment method is required')
     }
@@ -128,9 +140,9 @@ export const createInvoiceController = async (req, res) => {
           ? specialInstructions.trim()
           : '',
         orderRosurces: orderRosurces ? orderRosurces.trim() : '',
-        OrderDate: new Date(OrderDate),
-        issueDate: new Date(issueDate),
-        dueDate: new Date(dueDate),
+        OrderDate: orderDate,
+        issueDate: parsedIssueDate,
+        dueDate: parsedDueDate,
         paymentMethod: paymentMethod.trim(),
         advance: advance || '0',
         termsAndConditions: termsAndConditions ? termsAndConditions.trim() : '',
@@ -167,6 +179,7 @@ export const createInvoiceController = async (req, res) => {
     })
 
     // Send notification to user
+    console.log('Creating notification for userId:', userId)
     await createNotification({
       userId,
       title: 'Invoice Created',
@@ -342,13 +355,28 @@ export const updateInvoiceController = async (req, res) => {
 
     // Convert date strings to Date objects if provided
     if (updateData.OrderDate) {
-      updateData.OrderDate = new Date(updateData.OrderDate)
+      const date = new Date(updateData.OrderDate)
+      if (!isNaN(date.getTime())) {
+        updateData.OrderDate = date
+      } else {
+        throw new ApiError(400, 'Invalid Order Date format')
+      }
     }
     if (updateData.issueDate) {
-      updateData.issueDate = new Date(updateData.issueDate)
+      const date = new Date(updateData.issueDate)
+      if (!isNaN(date.getTime())) {
+        updateData.issueDate = date
+      } else {
+        throw new ApiError(400, 'Invalid Issue Date format')
+      }
     }
     if (updateData.dueDate) {
-      updateData.dueDate = new Date(updateData.dueDate)
+      const date = new Date(updateData.dueDate)
+      if (!isNaN(date.getTime())) {
+        updateData.dueDate = date
+      } else {
+        throw new ApiError(400, 'Invalid Due Date format')
+      }
     }
 
     // Remove fields that shouldn't be updated
