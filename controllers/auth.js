@@ -2,6 +2,8 @@ import prisma from '../config/prisma.js'
 import { ApiError, ApiResponse } from '../utills/apiResponse.js'
 import { generateAccessToken, generateRefreshToken } from '../utills/jwt.js'
 import { comparePassword, hashPassword } from '../utills/password.js'
+import { generateWelcomeEmailHTML } from '../utills/template.js'
+import nodemailer from 'nodemailer'
 
 // Public Signup - Creates ADMIN user with new company
 export const signupController = async (req, res) => {
@@ -134,7 +136,6 @@ export const createUserController = async (req, res) => {
   try {
     const { email, userName, password, address, role } = req.body
 
-    // Validate required fields
     if (!email || !userName || !password) {
       throw new ApiError(
         400,
@@ -187,6 +188,28 @@ export const createUserController = async (req, res) => {
       },
     })
 
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        secure: true,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      })
+
+      await transporter.sendMail({
+        from: `"Quotation System" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: 'Welcome to Quotation System - Your Account Details',
+        html: generateWelcomeEmailHTML(email, password, userName),
+      })
+
+      console.log('Email sent successfully!')
+    } catch (err) {
+      console.error('Failed to send welcome email:', err)
+    }
+
     return res
       .status(201)
       .json(
@@ -200,7 +223,6 @@ export const createUserController = async (req, res) => {
   }
 }
 
-// Get all users for admin's company
 export const getAllUsersController = async (req, res) => {
   try {
     const companyId = req.user.companyId
@@ -273,7 +295,6 @@ export const getAllUsersController = async (req, res) => {
   }
 }
 
-// Get user by ID (admin only)
 export const getUserByIdController = async (req, res) => {
   try {
     const { id } = req.params
@@ -322,7 +343,6 @@ export const getUserByIdController = async (req, res) => {
   }
 }
 
-// Update user by ID (admin only)
 export const updateUserController = async (req, res) => {
   try {
     const { id } = req.params
